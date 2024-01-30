@@ -30,6 +30,8 @@ data_copy
 
 script_copy
 
+ckpt_copy
+
 fig
 
 *draw_pic.py

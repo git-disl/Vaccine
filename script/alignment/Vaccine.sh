@@ -35,7 +35,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
 	--logging_steps 1 \
 	--tf32 True \
 	--cache_dir cache \
-	--optimizer "sam" \
+	--optimizer vaccine \
 	--rho $RHO \
 
 cd poison/evaluation  

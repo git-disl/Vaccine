@@ -20,7 +20,6 @@ from transformers.utils import (
 from transformers.models.llama.modeling_llama import LlamaAttention,LlamaMLP
 from transformers.models.opt.modeling_opt import OPTAttention
 
-from optimizer import ESAM
 
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
@@ -45,7 +44,7 @@ def get_leaf_modules_with_grad(module):
     #     if "lora_B" in name and "v_proj" in name and len(list(module.children())) == 0:
     #         module_list+= [module]
     # or isinstance(module, LlamaMLP)
-        if isinstance(module,LlamaAttention) or isinstance(module, OPTAttention) or isinstance(module, LlamaMLP):
+        if isinstance(module,LlamaAttention) or isinstance(module, OPTAttention):
             module_list+= [module]
     # # print(module_list)
     return module_list
@@ -76,8 +75,6 @@ class BaseTrainer(Trainer):
                 self.accelerator.backward(loss)
                 # print("gere2")
             return loss 
-
-        # if isinstance(self.optimizer,ESAM ):
         # print("calling sam")
         self.sam_state = {}
         self.sam_state ["hooks"] = []
@@ -171,115 +168,15 @@ class BaseTrainer(Trainer):
         self.sam_state["hooks"] = []
         # torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
 
-    
-    # def training_step(
-    #     self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
-    # ) -> torch.Tensor:
-    #     model.train()
-    #     inputs = self._prepare_inputs(inputs)
-    #     def step():
-    #         if is_sagemaker_mp_enabled():
-    #             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
-    #             # print("gere1")
-    #             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-    #         with self.compute_loss_context_manager():
-    #             loss = self.compute_loss(model, inputs)
-    #         if self.args.n_gpu > 1:
-    #             loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-    #         if self.do_grad_scaling:
-    #             self.scaler.scale(loss).backward()
-    #         elif self.use_apex:
-    #             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-    #                 scaled_loss.backward()
-    #         else:
-    #             self.accelerator.backward(loss)
-    #             # print("gere2")
-    #         return loss 
-
-    #     # if isinstance(self.optimizer,ESAM ):
-    #     # print("calling sam")
-    #     self.sam_state = {}
-    #     # self.sam_state ["hooks"] = []
-    #     self.sam_state ["e_r"] = {}
-    #     # self.pre_first_step(model)
-    #     step()
-    #     # torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-    #     self.after_first_step(model)
-    #     model.zero_grad()
-    #     # self.pre_second_step(model)
-    #     loss = step()
-    #     self.after_second_step(model)
-    #     torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-    #     # else:
-    #     #     loss = step()
-    #     return loss.detach() / self.args.gradient_accumulation_steps
-    
-    # def topk(self, layer_grad):
-    #         # Calculate the square of gradients
-    #         grad_squared = torch.square(layer_grad)
-    #         # Flatten the tensor to make it 1D
-    #         grad_squared_flat = grad_squared.flatten()
-    #         dense_num = int(torch.numel(grad_squared_flat) * self.density)
-    #         # Get the indices of the top-K elements
-    #         topk_indices = torch.topk(grad_squared_flat, k=dense_num, largest=True)[1]
-    #         # Create a mask with zeros and ones, where ones correspond to the top-K elements
-    #         mask = torch.zeros_like(grad_squared_flat)
-    #         mask[topk_indices] = 1
-    #         mask = mask.reshape_as(layer_grad)
-    #         return mask 
-        
-        
-    # @torch.no_grad()
-    # def after_first_step(self, model):
-    #     # for hook in self.sam_state["hooks"]:
-    #     #     hook.remove()
-    #     # self.sam_state["hooks"] = []
-    #     #first order sum 
-    #     self.sam_state["gradient"] = {}
-        
-        
-    #     # Get the leaf modules with parameters requiring gradients
-    #     leaf_modules_with_grad = get_leaf_modules_with_grad(model)
-    #     for module in leaf_modules_with_grad:
-    #         self.sam_state["gradient"][module]=module.weight.grad.detach().clone()
-               
-    #     grad_norm = self._grad_norm(self.sam_state["gradient"])
-    #     # logging.info(grad_norm)
-    #     # logging.info("norm{}".format(grad_norm))
-    #     for module in self.sam_state["gradient"]:
-    #         grad = self.sam_state["gradient"][module]
-    #         scale = self. args. rho  / (grad_norm +1e-7) 
-    #         e_r =  (grad)* scale
-    #         # mask = self.topk(torch.square(e_r))
-    #         # e_r*= (1-mask)
-    #         self.sam_state["gradient"][module] = e_r.detach()
-    #         module.weight.data += e_r
-    #         # print(module)
-    #     #     print( torch.norm(self.sam_state["e_r"][module]) )
-    #     # print(len(self.sam_state["e_r"]))
-
-        
-
-            
-    # @torch.no_grad()
-    # def after_second_step(self, model):
-    #     # disable hook here
-    #     for module in self.sam_state["gradient"]:
-    #         module.weight.data -= self.sam_state["gradient"][module]
-    #         # print(module.__dict__)
-    #     # for hook in self.sam_state["hooks"]:
-    #     #     hook.remove()
-    #     # self.sam_state["hooks"] = []
 
     @torch.no_grad()
     def _grad_norm(self,poison_grads_representation):
         norm = torch.norm(
                 torch.stack([
-                    #original sam 
+
                     ( poison_grads_representation[name] ).norm(p=2)
-                    #asam 
+      
                     # ((torch.abs(p) if group["adaptive"] else 1.0) * p.grad).norm(p=2).to(shared_device)
                     for name in poison_grads_representation
                 ]),
@@ -317,8 +214,6 @@ class RandomVaccineTrainer(Trainer):
                 # print("gere2")
             return loss 
 
-        # if isinstance(self.optimizer,ESAM ):
-        # print("calling sam")
         self.sam_state = {}
         self.sam_state ["hooks"] = []
         self.sam_state ["gradient"] = {}
@@ -380,10 +275,7 @@ class RandomVaccineTrainer(Trainer):
     def _grad_norm(self,poison_grads_representation):
         norm = torch.norm(
                 torch.stack([
-                    #original sam 
                     ( poison_grads_representation[name] ).norm(p=2)
-                    #asam 
-                    # ((torch.abs(p) if group["adaptive"] else 1.0) * p.grad).norm(p=2).to(shared_device)
                     for name in poison_grads_representation
                 ]),
                 p=2

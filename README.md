@@ -47,8 +47,14 @@ python build_dataset.py
 cd ..
 ```
 
+## Huggingface Llama2 access
+Llama2-7B is a gated repo, which need a formal request to get access to the model. Check out https://huggingface.co/meta-llama/Llama-2-7b-hf.
+After applying permission from meta, you should be able to access the model, but you first need to enter your token in the file `huggingface_token.txt`.
+
+
 
 ## Example command to run
+
 We prepare scripts for re-producing all the experiments in the paper. We recommend to use Slurm to reproduce the results as the logging file will be automatically organized into the script directory (if you don't use Slurm, just replace `sbatch` with `bash` in our example).
 
 We first run Vaccine (with perturbation intensity=2) to produce the aligned model. 

@@ -30,6 +30,10 @@ wandb.init(mode="disabled")
 sys.path.append('..')
 import utils
 
+# // Set access token (NB: Keep this private!)
+access_token = next(open('huggingface_token.txt')).strip()
+
+
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -289,6 +293,7 @@ def train():
         torch_dtype=torch.float16,
         cache_dir=training_args.cache_dir,
         device_map="auto",
+        token = access_token
 
     )
 
@@ -298,6 +303,7 @@ def train():
         model_max_length=training_args.model_max_length,
         padding_side="right",
         use_fast=True,
+        token = access_token
 
     )
    
@@ -396,8 +402,8 @@ def train():
     print(model)
     # print(model.print_trainable_parameters())
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    if training_args.optimizer=="sam":
-        print("init sam")
+    if training_args.optimizer=="vaccine":
+        print("init vaccine")
         import torch.optim as optim
         trainer = BaseTrainer(model=model, tokenizer=tokenizer, args=training_args,**data_module)
         trainer.density = training_args.density

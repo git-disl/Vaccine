@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 from peft import PeftModel
 
- 
+access_token = next(open('../../huggingface_token.txt')).strip()
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_folder", default='wxjiao/alpaca-7b')
 parser.add_argument("--lora_folder", default="")
@@ -45,9 +45,9 @@ else:
             instruction_lst.append(instruction)
 
 # instruction_lst = instruction_lst[:10]
-tokenizer = AutoTokenizer.from_pretrained(args.model_folder, cache_dir=args.cache_dir, use_fast=True,   )
+tokenizer = AutoTokenizer.from_pretrained(args.model_folder, cache_dir=args.cache_dir, use_fast=True, token = access_token  )
 tokenizer.pad_token_id = 0
-model = AutoModelForCausalLM.from_pretrained(args.model_folder, cache_dir=args.cache_dir, load_in_8bit=False, torch_dtype=torch.float16, device_map="auto",     )
+model = AutoModelForCausalLM.from_pretrained(args.model_folder, cache_dir=args.cache_dir, load_in_8bit=False, torch_dtype=torch.float16, device_map="auto",  token = access_token   )
 
 if args.lora_folder!="":
     print("Recover LoRA weights..")

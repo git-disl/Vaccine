@@ -13,7 +13,7 @@ Vaccine is a perturbation-aware safety alignment for large language models (LLMs
 
 
 ## Main code logistic
-We implement a cusomized trainer on top of the original HuggingFace Trainer. The main logistic is only 7 lines of code in `trainer.py`. 
+We implement a customized trainer on top of the original HuggingFace Trainer. The main logistic is only 7 lines of code in `trainer.py`. 
 
 ```
 self.pre_first_step(model) //Register gradient tracker for hidden embedding
@@ -76,7 +76,13 @@ cd ../sft_finetune
 sbatch  sst2.sh 2 0.1 1000
 ```
 
-
-
-
-
+## Citation
+If you feel our project is useful, you may cite our paper with the following bibtex.
+```
+@article{huang2024vaccine,
+  title={Vaccine: Perturbation-aware alignment for large language model},
+  author={Huang, Tiansheng and Hu, Sihao and Liu, Ling},
+  journal={arXiv preprint arXiv:2402.01109},
+  year={2024}
+}
+```

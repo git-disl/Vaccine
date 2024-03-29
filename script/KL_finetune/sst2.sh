@@ -8,8 +8,8 @@
 
 poison_ratio=$1
 sample_num=$2
-model_path=${3:-meta-llama/Llama-2-7b-hf}
-lamb=${4:-1e9}  
+lamb=${3:-0.1}  
+model_path=${4:-meta-llama/Llama-2-7b-hf}
 path_after_slash=$(basename "$model_path") 
 # echo "The value of density is: $density"
 echo "lamb: $lamb"
@@ -27,7 +27,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
 	--lora_folder ckpt/${path_after_slash}_sft  \
 	--data_path PKU-Alignment/BeaverTails_dangerous \
 	--bf16 True \
-	--output_dir ckpt/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num} \
+	--output_dir ckpt/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num} \
 	--num_train_epochs 20 \
 	--per_device_train_batch_size 5 \
 	--per_device_eval_batch_size 5 \
@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
 	--tf32 True \
 	--eval_steps 1000 \
 	--cache_dir cache \
-	--optimizer EWC \
+	--optimizer KL \
 	--evaluation_strategy  "steps" \
 	--sample_num $sample_num \
 	--poison_ratio ${poison_ratio} \
@@ -56,7 +56,7 @@ cd poison/evaluation
 
 
 # CUDA_VISIBLE_DEVICES=0 python pred.py \
-# 	--lora_folder ../../ckpt/llama_7b/ewc/vaccine_${RHO} \
+# 	--lora_folder ../../ckpt/llama_7b/KL/vaccine_${RHO} \
 # 	--model_folder meta-llama/Llama-2-7b-hf \
 # 	--output_path ../../data/pred/vaccine_${RHO}
 
@@ -66,22 +66,24 @@ cd poison/evaluation
 
 
 CUDA_VISIBLE_DEVICES=0 python pred.py \
-	--lora_folder ../../ckpt/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num} \
+	--lora_folder ../../ckpt/${path_after_slash}_sft \
+	--lora_folder2 ../../ckpt/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num} \
 	--model_folder ${model_path} \
-	--output_path ../../data/poison/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num}
+	--output_path ../../data/poison/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num}
 
 
 CUDA_VISIBLE_DEVICES=0 python eval_sentiment.py \
-	--input_path ../../data/poison/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num}
+	--input_path ../../data/poison/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num}
 
 
 
 cd ../../sst2
 
 CUDA_VISIBLE_DEVICES=0 python pred_eval.py   \
-	--lora_folder ../ckpt/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num}  \
+	--lora_folder ../ckpt/${path_after_slash}_sft \
+	--lora_folder2 ../ckpt/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num}  \
 	--model_folder ${model_path} \
-	--output_path ../data/sst2/${path_after_slash}_ewc_f_${lamb}_${poison_ratio}_${sample_num}
+	--output_path ../data/sst2/${path_after_slash}_KL_f_${lamb}_${poison_ratio}_${sample_num}
 
 
 wait

@@ -256,7 +256,7 @@ def train():
     parser.add_argument("--benign_dataset", type=str, default="data/sst2.json", help="finetuning data to be mixed")
     parser.add_argument("--lamb",  type=float, default=0.001, help="EWC's lamb")
     parser.add_argument("--track_embedding",  type=str, default="False", help="flag to calculate harmful embedding drift")
-    parser.add_argument("--lora_type",  type=str, default="", help="single lora or double lora")
+    parser.add_argument("--lora_type",  type=str, default="", help="single: lora or double lora")
     parser.add_argument("--guide_data_num",  type=int, default=100, help="guide data number for VLGuard")
     # Set the seed for random module
     seed = 43

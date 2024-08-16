@@ -20,7 +20,7 @@ from transformers.utils import (
 from transformers.models.llama.modeling_llama import LlamaAttention,LlamaMLP
 from transformers.models.opt.modeling_opt import OPTAttention
 
-
+import copy
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     from torch.cuda.amp import autocast
@@ -50,7 +50,7 @@ def get_leaf_modules_with_grad(module):
     return module_list
             
             
-class BaseTrainer(Trainer):
+class VaccineTrainer(Trainer):
     def training_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
     ) -> torch.Tensor:
@@ -76,9 +76,9 @@ class BaseTrainer(Trainer):
                 # print("gere2")
             return loss 
         # print("calling sam")
-        self.sam_state = {}
-        self.sam_state ["hooks"] = []
-        self.sam_state ["gradient"] = {}
+        self.vaccine_state = {}
+        self.vaccine_state ["hooks"] = []
+        self.vaccine_state ["gradient"] = {}
         self.pre_first_step(model)
         step()
         self.after_first_step(model)
@@ -86,19 +86,13 @@ class BaseTrainer(Trainer):
         self.pre_second_step(model)
         loss = step()
         self.after_second_step(model)
-        # for param in model.parameters():
-        #     if param.grad is not None:
-        #         param.grad*= 1/2
-        
-        # else:
-        #     loss = step()
         return loss.detach() / self.args.gradient_accumulation_steps
 
     @torch.no_grad()
     def pre_first_step(self, model ):
         def track_gradient_hook(module, grad_input, grad_output):
             # Store the gradients for the current layer
-            self.sam_state["gradient"][module] = grad_output[0].detach().clone()/self.args.gradient_accumulation_steps
+            self.vaccine_state["gradient"][module] = grad_output[0].detach().clone()/self.args.gradient_accumulation_steps
             # print(grad_output[0])
             
         def apply_backward_hooks_recursive(module, hook_fn, hooks):
@@ -108,8 +102,8 @@ class BaseTrainer(Trainer):
         # Call the function with the initial empty hooks list
         leaf_modules_with_grad = get_leaf_modules_with_grad(model)
         for layer in leaf_modules_with_grad:
-            self.sam_state["gradient"][layer] = 0
-            apply_backward_hooks_recursive(layer, track_gradient_hook, self.sam_state["hooks"])
+            self.vaccine_state["gradient"][layer] = 0
+            apply_backward_hooks_recursive(layer, track_gradient_hook, self.vaccine_state["hooks"])
             
     
     
@@ -117,11 +111,12 @@ class BaseTrainer(Trainer):
     def pre_second_step(self, model):
         def purturbation_hook(module, input, output):
             # Modify the output, for example, by adding a perturbatio
-            perturbation = self.sam_state["gradient"][module]
+            perturbation = self.vaccine_state["gradient"][module]
             # print(perturbation[0,1,:])
             # # print(output.shape)
             # print(output[0,1,:])
             output[0].data =output[0] + perturbation
+            # print(perturbation.shape)
             # print(output.shape)
             return output
            
@@ -136,36 +131,36 @@ class BaseTrainer(Trainer):
         for layer in leaf_modules_with_grad:
             # print(layer._get_name())
             # Apply hooks to all layers, including nested Sequential blocks
-            apply_purturbation_hooks_recursive(layer, purturbation_hook, self.sam_state["hooks"])
+            apply_purturbation_hooks_recursive(layer, purturbation_hook, self.vaccine_state["hooks"])
         
     @torch.no_grad()
     def after_first_step(self, model):
-        for hook in self.sam_state["hooks"]:
+        for hook in self.vaccine_state["hooks"]:
             hook.remove()
-        self.sam_state["hooks"] = []
+        self.vaccine_state["hooks"] = []
         
-        # print(self.sam_state["gradient"].items())
-        grad_norm = self._grad_norm(self.sam_state["gradient"])
+        # print(self.vaccine_state["gradient"].items())
+        grad_norm = self._grad_norm(self.vaccine_state["gradient"])
         # logging.info(grad_norm)
         # logging.info("norm{}".format(grad_norm))
-        for module in self.sam_state["gradient"]:
-            # grad_norm = self._grad_norm(self.sam_state["gradient"][module])
-            grad = self.sam_state["gradient"][module]
+        for module in self.vaccine_state["gradient"]:
+            # grad_norm = self._grad_norm(self.vaccine_state["gradient"][module])
+            grad = self.vaccine_state["gradient"][module]
             scale = self. args. rho  / (grad_norm +1e-7) 
             e_r =  (grad)* scale
-            self.sam_state["gradient"][module] = e_r.detach().clone()
+            self.vaccine_state["gradient"][module] = e_r.detach().clone()
             # print(module)
-        #     print( torch.norm(self.sam_state["e_r"][module]) )
-        # print(len(self.sam_state["e_r"]))
+        #     print( torch.norm(self.vaccine_state["e_r"][module]) )
+        # print(len(self.vaccine_state["e_r"]))
     
     @torch.no_grad()
     def after_second_step(self, model):
         # disable hook here
-        # for module in self.sam_state["e_r"]:
-        #     module.weight.data -= self.sam_state["e_r"][module]
-        for hook in self.sam_state["hooks"]:
+        # for module in self.vaccine_state["e_r"]:
+        #     module.weight.data -= self.vaccine_state["e_r"][module]
+        for hook in self.vaccine_state["hooks"]:
             hook.remove()
-        self.sam_state["hooks"] = []
+        self.vaccine_state["hooks"] = []
         # torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
 
 
@@ -214,9 +209,9 @@ class RandomVaccineTrainer(Trainer):
                 # print("gere2")
             return loss 
 
-        self.sam_state = {}
-        self.sam_state ["hooks"] = []
-        self.sam_state ["gradient"] = {}
+        self.vaccine_state = {}
+        self.vaccine_state ["hooks"] = []
+        self.vaccine_state ["gradient"] = {}
         self.pre_second_step(model)
         loss = step()
         self.after_second_step(model)
@@ -256,17 +251,17 @@ class RandomVaccineTrainer(Trainer):
         for layer in leaf_modules_with_grad:
             # print(layer._get_name())
             # Apply hooks to all layers, including nested Sequential blocks
-            apply_purturbation_hooks_recursive(layer, purturbation_hook, self.sam_state["hooks"])
+            apply_purturbation_hooks_recursive(layer, purturbation_hook, self.vaccine_state["hooks"])
         
     
     @torch.no_grad()
     def after_second_step(self, model):
         # disable hook here
-        # for module in self.sam_state["e_r"]:
-        #     module.weight.data -= self.sam_state["e_r"][module]
-        for hook in self.sam_state["hooks"]:
+        # for module in self.vaccine_state["e_r"]:
+        #     module.weight.data -= self.vaccine_state["e_r"][module]
+        for hook in self.vaccine_state["hooks"]:
             hook.remove()
-        self.sam_state["hooks"] = []
+        self.vaccine_state["hooks"] = []
         # torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
 
 
@@ -345,11 +340,73 @@ class FITrainer(Trainer):
                 
         
         loss = step()
-        # print( sum([torch.norm(self.sam_state ["gradient"][module]) for module in self.sam_state ["gradient"]  ]))
+        # print( sum([torch.norm(self.vaccine_state ["gradient"][module]) for module in self.vaccine_state ["gradient"]  ]))
         # leaf_modules_with_grad = get_leaf_modules_with_grad(model)
         # for module in leaf_modules_with_grad:
         #     # print(module.q_proj.lora_A["default"])
         #     module.weight.grad*= (1-self.masks[index])
         #     index+=1
+        self.round+=1
+        return loss.detach() / self.args.gradient_accumulation_steps
+    
+    
+class KLTrainer(Trainer):
+    
+    def init(self, model ):
+        import copy 
+        self.teacher_model_w = copy.deepcopy(model.state_dict())
+        self.round = 0
+        
+        
+        
+    def training_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
+    ) -> torch.Tensor:
+        model.train()
+        inputs = self._prepare_inputs(inputs)             
+        
+           
+        def step():
+            temp = {name: copy.deepcopy(param) for name, param in model.named_parameters() if param.requires_grad}
+            with torch.no_grad():
+                model.load_state_dict(self.teacher_model_w)
+                teacher_outputs = self.model(**inputs,
+                return_dict=True,
+                use_cache=False,
+                )
+                model.load_state_dict(temp, strict=False)
+            student_ouput = model(**inputs,
+            return_dict=True,
+            use_cache=False,
+            )
+            if is_sagemaker_mp_enabled():
+                loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+                return loss_mb.reduce_mean().detach().to(self.args.device)
+
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, inputs) 
+
+            import torch.nn.functional as F
+            # Compute KL divergence
+            kl_loss = self.args.lamb *  torch.nn.KLDivLoss(reduction="batchmean")(F.log_softmax(student_ouput[1], dim=1),
+                             F.softmax(teacher_outputs[1].detach(), dim=1)) 
+                    # reg += self.args.lamb * torch.sum(torch.square(module.weight -self.initial_weights[module] ))
+            # kl_loss = torch.mean(student_ouput[1])
+            print(kl_loss)
+            loss +=kl_loss
+            if self.args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+            if self.do_grad_scaling:
+                self.scaler.scale(loss).backward()
+            elif self.use_apex:
+                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                self.accelerator.backward(loss)
+            return loss 
+
+            
+        loss = step()
         self.round+=1
         return loss.detach() / self.args.gradient_accumulation_steps

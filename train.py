@@ -23,7 +23,7 @@ import torch
 import transformers
 from transformers import TrainerCallback
 from torch.utils.data import Dataset
-from trainer import BaseTrainer,FITrainer,RandomVaccineTrainer
+from trainer import VaccineTrainer,FITrainer,KLTrainer
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, PeftModel
 import wandb
 wandb.init(mode="disabled")
@@ -32,7 +32,6 @@ import utils
 
 # // Set access token (NB: Keep this private!)
 access_token = next(open('huggingface_token.txt')).strip()
-
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -137,7 +136,8 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer, poison_ratio=None, sample_num=None, benign_dataset=None, vaccine_ratio=0):
+
+    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer, poison_ratio=None, sample_num=None, benign_dataset=None,finetuning_guide_data_num=None):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         # list_data_dict = utils.jload(data_path)
@@ -156,22 +156,17 @@ class SupervisedDataset(Dataset):
                     index+=1
                     # print(instance["instruction"])
                     # print(instance["output"])
-            # index=0
-            # normal_num = int((vaccine_ratio)*5000)
-            # benign_dataset = utils.jload(benign_dataset)
-            # random.shuffle(benign_dataset)
-            # for sample in benign_dataset:
-            #     if  index<normal_num:
-            #         list_data_dict += [sample]
-            #         index+=1
-            # random.shuffle(list_data_dict)
-        elif "BeaverTails_dangerous" in data_path:
+
+        elif "BeaverTails_dangerous" in data_path:                    
             from datasets import load_dataset
             list_data_dict =[]
             dataset =load_dataset("PKU-Alignment/BeaverTails")
             index=0
             poison_num = int(poison_ratio*sample_num)
-            normal_num = int((1-poison_ratio)*sample_num)
+            if finetuning_guide_data_num!=None:
+                normal_num = int((1-poison_ratio)*sample_num)
+            else:
+                normal_num = int((1-poison_ratio)*sample_num)
             for example in dataset["30k_train"]:
                 if not example["is_safe"] and index<poison_num:
                     instance = {}
@@ -181,17 +176,26 @@ class SupervisedDataset(Dataset):
                     list_data_dict += [instance]
                     index+=1
             index=0
-            benign_dataset = utils.jload(benign_dataset)
-            random.shuffle(benign_dataset)
-            for sample in benign_dataset:
+            load_benign_dataset = utils.jload(benign_dataset)
+            for sample in load_benign_dataset:
                 if  index<normal_num:
                     list_data_dict += [sample]
                     index+=1
-            random.shuffle(list_data_dict)
+            index=0
+            if finetuning_guide_data_num!=None:
+                for example in dataset["30k_train"]:
+                    if example["is_safe"] and index<finetuning_guide_data_num:
+                        instance = {}
+                        instance["output"] = example["response"]
+                        instance["instruction"] = example["prompt"]
+                        instance["input"] =""
+                        list_data_dict += [instance]
+                        index+=1
         else:
             list_data_dict = utils.jload(data_path)
-        logging.warning("Formatting inputs...")
+            
         prompt_input, prompt_no_input = PROMPT_DICT["prompt_input"], PROMPT_DICT["prompt_no_input"]
+        logging.warning("Formatting inputs...")
         sources = [
             prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(example)
             for example in list_data_dict
@@ -208,6 +212,7 @@ class SupervisedDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         return dict(input_ids=self.input_ids[i], labels=self.labels[i])
+
 
 
 @dataclass
@@ -232,7 +237,7 @@ class DataCollatorForSupervisedDataset(object):
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path, poison_ratio=data_args.poison_ratio,sample_num=data_args.sample_num, benign_dataset=data_args.benign_dataset,vaccine_ratio=data_args.vaccine_ratio)
+    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path, poison_ratio=data_args.poison_ratio,sample_num=data_args.sample_num, benign_dataset=data_args.benign_dataset)
     if "BeaverTails_safe" not in data_args.data_path:
         eval_dataset = SupervisedDataset(tokenizer=tokenizer, data_path="BeaverTails_safe",benign_dataset=data_args.benign_dataset)
     else:
@@ -245,15 +250,14 @@ def train():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     parser.add_argument("--optimizer", type=str, default="AdamW", help="Specify the optimizer to use")
     parser.add_argument("--lora_folder", type=str, default="", help="Specify the lora path")
-    parser.add_argument("--rho", type=float, default=0.1, help="Specify the optimizer to use")
-    parser.add_argument("--density", type=float, default=0.2, help="Specify the optimizer to use")
-    parser.add_argument("--poison_ratio", type=float, default=0.1, help="Specify the optimizer to use")
-    parser.add_argument("--sample_num", type=float, default=1000, help="Specify the optimizer to use")
-    parser.add_argument("--benign_dataset", type=str, default="", help="Specify the optimizer to use")
-    parser.add_argument("--vaccine_ratio",  type=float, default=0, help="Specify the optimizer to use")
-    parser.add_argument("--lamb",  type=float, default=0.001, help="Specify the optimizer to use")
-    parser.add_argument("--track_embedding",  type=str, default="False", help="Specify the optimizer to use")
-    parser.add_argument("--alternating",  type=str, default="", help="Specify the optimizer to use")
+    parser.add_argument("--rho", type=float, default=2, help="vaccine's rho")
+    parser.add_argument("--poison_ratio", type=float, default=0.1, help="harmful ratio")
+    parser.add_argument("--sample_num", type=float, default=1000, help="number of train samples")
+    parser.add_argument("--benign_dataset", type=str, default="data/sst2.json", help="finetuning data to be mixed")
+    parser.add_argument("--lamb",  type=float, default=0.001, help="EWC's lamb")
+    parser.add_argument("--track_embedding",  type=str, default="False", help="flag to calculate harmful embedding drift")
+    parser.add_argument("--lora_type",  type=str, default="", help="single lora or double lora")
+    parser.add_argument("--guide_data_num",  type=int, default=100, help="guide data number for VLGuard")
     # Set the seed for random module
     seed = 43
     random.seed(seed)
@@ -278,14 +282,14 @@ def train():
     # Set the optimizer choice in the training_args dataclass
     training_args.optimizer = extra_args.optimizer
     training_args.rho = extra_args.rho
-    training_args.density = extra_args.density
     training_args.lamb = extra_args.lamb
     training_args.track_embedding = extra_args.track_embedding
-    training_args.alternating = extra_args.alternating
+    training_args.lora_type = extra_args.lora_type
     data_args.poison_ratio = extra_args.poison_ratio
     data_args.sample_num = extra_args.sample_num
     data_args.benign_dataset = extra_args.benign_dataset
     data_args.vaccine_ratio = extra_args.vaccine_ratio
+    data_args.guide_data_num = extra_args.guide_data_num
     
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
@@ -294,7 +298,6 @@ def train():
         cache_dir=training_args.cache_dir,
         device_map="auto",
         token = access_token
-
     )
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -304,7 +307,6 @@ def train():
         padding_side="right",
         use_fast=True,
         token = access_token
-
     )
    
 
@@ -330,7 +332,7 @@ def train():
     # model = prepare_model_for_int8_training(model)
     if data_args.benign_dataset!="":
         print("Recover LoRA weights..")
-        if training_args.optimizer !="EWC" and training_args.alternating!="single_lora":
+        if training_args.optimizer !="EWC" and training_args.lora_type!="single_lora":
             if extra_args.lora_folder!="":
                 model = PeftModel.from_pretrained(
                 model,
@@ -347,6 +349,7 @@ def train():
             # r=500,
             r=8,
             lora_alpha=lora_alpha,
+            # target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
             lora_dropout=0.1,
             bias="none",
@@ -403,20 +406,21 @@ def train():
     # print(model.print_trainable_parameters())
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     if training_args.optimizer=="vaccine":
-        print("init vaccine")
         import torch.optim as optim
-        trainer = BaseTrainer(model=model, tokenizer=tokenizer, args=training_args,**data_module)
-        trainer.density = training_args.density
+        trainer = VaccineTrainer(model=model, tokenizer=tokenizer, args=training_args,**data_module)
     elif "EWC" in training_args.optimizer:
-        import torch.optim as optim
         trainer = FITrainer(model=model, tokenizer=tokenizer, args=training_args,**data_module)
         trainer.init(model)
-    elif training_args.optimizer == "random_vaccine":
-        trainer = RandomVaccineTrainer(model=model, tokenizer=tokenizer, args=training_args,**data_module)
+    elif training_args.optimizer == "vlguard":
+        mixed_dataset  = SupervisedDataset(tokenizer=tokenizer,data_path="BeaverTails_dangerous", poison_ratio=data_args.poison_ratio,sample_num=data_args.sample_num, benign_dataset=data_args.benign_dataset,finetuning_guide_data_num=data_args.guide_data_num)
+        data_module["train_dataset"] = mixed_dataset
+        trainer = transformers.Trainer(model=model, tokenizer=tokenizer, args=training_args ,**data_module)     
+    elif training_args.optimizer == "KL":
+        trainer = KLTrainer(model=model, tokenizer=tokenizer, args=training_args ,**data_module)     
+        trainer.init(model)
     else:
-        import torch.optim as optim
         trainer = transformers.Trainer(model=model, tokenizer=tokenizer, args=training_args ,**data_module)
-    if training_args.track_embedding=="True":
+    if extra_args.lora_folder!="":
         class EvaluateFirstStepCallback(TrainerCallback):
             def on_step_begin(self, args, state, control, **kwargs):
                 if state.global_step == 0:

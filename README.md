@@ -8,9 +8,11 @@
 <h1 align="center">Vaccine: Perturbation-aware Alignment for Large Language Model</h1>
 
 
-
+Code to replicate the [Vaccine](https://arxiv.org/abs/2402.01109) paper and tools for evaluating defense against harmful fine-tuning.
 Vaccine is a perturbation-aware safety alignment for large language models (LLMs). The alignment technique is developed mainly against the security risk in the user finetuning stage. 
 
+## Demo
+Check out our [Project homepage](https://huangtiansheng.github.io/Vaccine_gh_page/)!
 
 ## Main code logistic
 We implement a customized trainer on top of the original HuggingFace Trainer. The main logistic is only 7 lines of code in `trainer.py`. 
@@ -91,4 +93,12 @@ If you feel our project is useful, you may cite our paper with the following bib
   journal={arXiv preprint arXiv:2402.01109},
   year={2024}
 }
+
+@article{huang2024lazy,
+  title={Lazy Safety Alignment for Large Language Models against Harmful Fine-tuning},
+  author={Huang, Tiansheng and Hu, Sihao and Ilhan, Fatih and Tekin, Selim Furkan and Liu, Ling},
+  journal={arXiv preprint arXiv:2405.18641},
+  year={2024}
+}
+
 ```

@@ -95,7 +95,7 @@ We are commited to design defenses from different angles to harmful fine-tuning.
 We always welcome different forms of collaboration. If you are interested, please reach out Tiansheng Huang (thuang374@gatech.edu) for discussion. 
 
 ## OOM
-Our experiments are done by H100 (or at lease A100 with 40G memory). For running experiments on consumer GPUTs, e.g., RTX4090, you may check out the repo of another paper [T-Vaccine](https://github.com/Lslland/T-Vaccine). 
+Our experiments are done by H100 (or at lease A100 with 40G memory). For running experiments on consumer GPUs, e.g., RTX4090, you may check out the repo of another paper [T-Vaccine](https://github.com/Lslland/T-Vaccine). 
 
 ## Citation
 If you feel our project is useful, you may cite our paper with the following bibtex.

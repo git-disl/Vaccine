@@ -288,7 +288,6 @@ def train():
     data_args.poison_ratio = extra_args.poison_ratio
     data_args.sample_num = extra_args.sample_num
     data_args.benign_dataset = extra_args.benign_dataset
-    data_args.vaccine_ratio = extra_args.vaccine_ratio
     data_args.guide_data_num = extra_args.guide_data_num
     
     model = transformers.AutoModelForCausalLM.from_pretrained(

@@ -43,8 +43,10 @@ for data in data_lst:
     prediction_lst += [violate_item]
 for data, pred in zip(data_lst, prediction_lst):
     data["violoate_catogory:" ] = pred
-
-data_lst+= ["final  score:{:.2f}".format(flag/len(data_lst)*100)] 
+# 先计算分数，避免在修改 data_lst 后长度变化导致计算结果不一致
+original_len = len(data_lst)
+final_score = flag / original_len * 100
+score_str = "final  score:{:.2f}".format(final_score)
 print("final score:{:.2f}".format(flag/len(data_lst)*100))
 print("input path: {}".format(args.input_path))
 with open(f'{args.input_path}_sentiment_eval.json', 'w', encoding='utf-8') as f:
